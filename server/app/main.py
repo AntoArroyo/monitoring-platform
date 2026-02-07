@@ -1,7 +1,9 @@
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from datetime import datetime
-
+from datetime import datetime, timedelta
+from sqlalchemy import func
 from app.db.session import SessionLocal, engine
 from app.db.base import Base
 from app.db.models import Host, Metric
@@ -11,6 +13,7 @@ app = FastAPI(title="Monitoring Platform")
 
 Base.metadata.create_all(bind=engine)
 
+templates = Jinja2Templates(directory="app/templates")
 
 def get_db():
     db = SessionLocal()
@@ -23,6 +26,10 @@ def get_db():
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+@app.get("/dashboard", response_class=HTMLResponse)
+def dashboard(request: Request):
+    return templates.TemplateResponse("dashboard.html", {"request": request})
 
 @app.get("/metrics/latest")
 def get_latest_metrics(db: Session = Depends(get_db)):
@@ -73,3 +80,54 @@ def ingest_metrics(payload: IngestPayload, db: Session = Depends(get_db)):
     db.commit()
 
     return {"status": "ingested"}
+
+
+
+@app.get("/metrics/timeseries")
+def get_timeseries(
+    metric_name: str,
+    minutes: int = 60,
+    db: Session = Depends(get_db),
+):
+    since = datetime.now() - timedelta(minutes=minutes)
+
+    rows = (
+        db.query(Metric)
+        .filter(Metric.metric_name == metric_name)
+        .filter(Metric.timestamp >= since)
+        .order_by(Metric.timestamp.asc())
+        .all()
+    )
+
+    return [
+        {
+            "timestamp": m.timestamp.isoformat(),
+            "value": m.value,
+        }
+        for m in rows
+    ]
+    
+@app.get("/metrics/latest-per-host")
+def latest_per_host(db: Session = Depends(get_db)):
+    subq = (
+        db.query(
+            Metric.host_id,
+            Metric.metric_name,
+            func.max(Metric.timestamp).label("max_ts"),
+        )
+        .group_by(Metric.host_id, Metric.metric_name)
+        .subquery()
+    )
+
+    rows = (
+        db.query(Metric)
+        .join(
+            subq,
+            (Metric.host_id == subq.c.host_id)
+            & (Metric.metric_name == subq.c.metric_name)
+            & (Metric.timestamp == subq.c.max_ts),
+        )
+        .all()
+    )
+
+    return rows

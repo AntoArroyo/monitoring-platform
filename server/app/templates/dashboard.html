@@ -5,23 +5,61 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
-  <h1>Monitoring Dashboard</h1>
-
+  <h1>CPU Usage</h1>
   <canvas id="cpuChart"></canvas>
 
-  <script>
-    const ctx = document.getElementById('cpuChart');
+    <script>
+        async function loadCPU() {
+            const res = await fetch('/metrics/timeseries?metric_name=cpu_percent&minutes=60');
+            const data = await res.json();
 
-    new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: [{
-          label: 'CPU %',
-          data: [],
-        }]
-      }
-    });
+            const labels = data.map(p => p.timestamp);
+            const values = data.map(p => p.value);
+
+            const ctx = document.getElementById('cpuChart');
+
+            new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                label: 'CPU Usage %',
+                data: values,
+                }]
+            }
+            });
+        }
+
+        loadCPU();
+    </script>
+
+    <h1>RAM Usage</h1>
+    <canvas id="ramChart"></canvas>
+    <script>
+    async function loadRAM() {
+      const res = await fetch('/metrics/timeseries?metric_name=ram_percent&minutes=60');
+      const data = await res.json();
+
+      const labels = data.map(p => p.timestamp);
+      const values = data.map(p => p.value);
+
+      const ctx = document.getElementById('ramChart');
+
+      new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'RAM Usage %',
+            data: values,
+          }]
+        }
+      });
+    }
+
+    loadRAM();
   </script>
+
+
 </body>
 </html>

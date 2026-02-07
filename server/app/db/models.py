@@ -10,7 +10,7 @@ class Host(Base):
     id = Column(Integer, primary_key=True)
     agent_id = Column(String, unique=True, index=True)
     hostname = Column(String)
-    last_seen = Column(DateTime, default=datetime.utcnow)
+    last_seen = Column(DateTime, default=datetime.now())
 
     metrics = relationship("Metric", back_populates="host")
 
@@ -22,6 +22,6 @@ class Metric(Base):
     host_id = Column(Integer, ForeignKey("hosts.id"))
     metric_name = Column(String, index=True)
     value = Column(Float)
-    timestamp = Column(DateTime, default=datetime.utcnow)
+    timestamp = Column(DateTime, default=datetime.now())
 
     host = relationship("Host", back_populates="metrics")
