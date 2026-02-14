@@ -1,65 +1,127 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
   <title>Monitoring Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/luxon@3.3.0/build/global/luxon.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.2.0"></script>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.3.3/dist/tailwind.min.css" rel="stylesheet">
 </head>
-<body>
-  <h1>CPU Usage</h1>
-  <canvas id="cpuChart"></canvas>
+<body class="bg-gray-100 font-sans">
 
-    <script>
-        async function loadCPU() {
-            const res = await fetch('/metrics/timeseries?metric_name=cpu_percent&minutes=60');
-            const data = await res.json();
+  <header class="bg-blue-600 text-white p-4 mb-6">
+    <h1 class="text-3xl font-bold">Monitoring Dashboard</h1>
+    <p class="text-sm">Live system metrics for CPU, RAM, Disk, and Raspberry Pi temperature</p>
+  </header>
 
-            const labels = data.map(p => p.timestamp);
-            const values = data.map(p => p.value);
+  <main class="container mx-auto px-4">
 
-            const ctx = document.getElementById('cpuChart');
+    <!-- Metric summary cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white shadow rounded p-4">
+        <h3 class="font-bold text-lg">CPU %</h3>
+        <p id="cpu-current" class="text-2xl mt-2">--</p>
+      </div>
+      <div class="bg-white shadow rounded p-4">
+        <h3 class="font-bold text-lg">RAM %</h3>
+        <p id="ram-current" class="text-2xl mt-2">--</p>
+      </div>
+      <div class="bg-white shadow rounded p-4">
+        <h3 class="font-bold text-lg">Disk %</h3>
+        <p id="disk-current" class="text-2xl mt-2">--</p>
+      </div>
+      <div class="bg-white shadow rounded p-4">
+        <h3 class="font-bold text-lg">Pi Temp °C</h3>
+        <p id="temp-current" class="text-2xl mt-2">--</p>
+      </div>
+    </div>
 
-            new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                label: 'CPU Usage %',
-                data: values,
-                }]
-            }
-            });
-        }
+    <!-- Charts grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div class="bg-white shadow rounded p-4">
+        <h2 class="text-xl font-semibold mb-2">CPU Usage</h2>
+        <canvas id="cpuChart"></canvas>
+      </div>
+      <div class="bg-white shadow rounded p-4">
+        <h2 class="text-xl font-semibold mb-2">RAM Usage</h2>
+        <canvas id="ramChart"></canvas>
+      </div>
+      <div class="bg-white shadow rounded p-4">
+        <h2 class="text-xl font-semibold mb-2">Disk Usage</h2>
+        <canvas id="diskChart"></canvas>
+      </div>
+      <div class="bg-white shadow rounded p-4">
+        <h2 class="text-xl font-semibold mb-2">Pi Temperature</h2>
+        <canvas id="tempChart"></canvas>
+      </div>
+    </div>
+  </main>
 
-        loadCPU();
-    </script>
-
-    <h1>RAM Usage</h1>
-    <canvas id="ramChart"></canvas>
-    <script>
-    async function loadRAM() {
-      const res = await fetch('/metrics/timeseries?metric_name=ram_percent&minutes=60');
+  <script>
+    // Fetch metrics for a given metric_name
+    async function loadMetrics(metric_name) {
+      const res = await fetch(`/metrics/timeseries?metric_name=${metric_name}&minutes=60`);
       const data = await res.json();
+      return data.map(p => ({x: new Date(p.timestamp), y: p.value}));
+    }
 
-      const labels = data.map(p => p.timestamp);
-      const values = data.map(p => p.value);
+    // Update summary cards with latest values
+    function updateSummary(cpuData, ramData, diskData, tempData) {
+      const last = arr => arr.length ? arr[arr.length-1].y.toFixed(1) : '--';
+      document.getElementById('cpu-current').textContent = last(cpuData);
+      document.getElementById('ram-current').textContent = last(ramData);
+      document.getElementById('disk-current').textContent = last(diskData);
+      document.getElementById('temp-current').textContent = last(tempData);
+    }
 
-      const ctx = document.getElementById('ramChart');
-
-      new Chart(ctx, {
+    // Draw Chart.js chart
+    function createChart(ctx, label, data, color) {
+      return new Chart(ctx, {
         type: 'line',
-        data: {
-          labels: labels,
-          datasets: [{
-            label: 'RAM Usage %',
-            data: values,
-          }]
+        data: { datasets: [{ label, data, borderColor: color, backgroundColor: color, fill: false, tension: 0.3 }] },
+        options: {
+          parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+          animation: { duration: 0 },
+          responsive: true,
+          scales: {
+            x: { type: 'time', time: { unit: 'minute', tooltipFormat: 'HH:mm:ss' }, title: { display: true, text: 'Time' } },
+            y: { beginAtZero: true, title: { display: true, text: label } }
+          },
+          plugins: { legend: { display: false } }
         }
       });
     }
 
-    loadRAM();
+    let charts = {};
+
+    async function drawCharts() {
+      const cpuData = await loadMetrics("cpu_percent");
+      const ramData = await loadMetrics("ram_percent");
+      const diskData = await loadMetrics("disk_percent");
+      const tempData = await loadMetrics("pi_temperature");
+
+      updateSummary(cpuData, ramData, diskData, tempData);
+
+      // First time: create charts
+      if (!charts.cpu) {
+        charts.cpu  = createChart(document.getElementById("cpuChart"), "CPU %", cpuData, "red");
+        charts.ram  = createChart(document.getElementById("ramChart"), "RAM %", ramData, "blue");
+        charts.disk = createChart(document.getElementById("diskChart"), "Disk %", diskData, "green");
+        charts.temp = createChart(document.getElementById("tempChart"), "Pi Temp °C", tempData, "orange");
+      } else {
+        // Update existing charts
+        charts.cpu.data.datasets[0].data  = cpuData;
+        charts.ram.data.datasets[0].data  = ramData;
+        charts.disk.data.datasets[0].data = diskData;
+        charts.temp.data.datasets[0].data = tempData;
+        for (let c in charts) charts[c].update();
+      }
+    }
+
+    // Initial draw + auto-refresh every 5 seconds
+    drawCharts();
+    setInterval(drawCharts, 5000);
   </script>
-
-
 </body>
 </html>

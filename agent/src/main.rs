@@ -36,6 +36,8 @@ struct Payload {
 
 const WAIT_SECS: u64 = 5; // dev mode
 
+/// On a Raspberry Pi, reads the CPU temperature from the system file. On a regular PC, this will return None.
+/// The temperature is returned in Celsius. The file contains the temperature in millidegrees, so we divide by 1000 to get degrees.
 fn get_pi_temp() -> Option<f32> {
     let path = "/sys/class/thermal/thermal_zone0/temp";
     if let Ok(raw) = std::fs::read_to_string(path) {
@@ -46,6 +48,9 @@ fn get_pi_temp() -> Option<f32> {
     None
 }
 
+/// Main loop: every WAIT_SECS seconds, read system metrics and send to server.
+//  The payload includes CPU usage, RAM usage, disk usage, uptime, and Raspberry Pi CPU temperature (if available). 
+// The payload is sent as JSON to the server's /api/v1/ingest endpoint. If the request fails, it logs the error but continues running.
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let args = Args::parse();
