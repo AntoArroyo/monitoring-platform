@@ -3,7 +3,7 @@ from datetime import datetime
 def test_ingest_metrics(client):
     payload = {
         "agent_id": "test-pi-01",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now().isoformat(),
         "system": {
             "cpu_percent": 12.5,
             "ram_percent": 45.0,
